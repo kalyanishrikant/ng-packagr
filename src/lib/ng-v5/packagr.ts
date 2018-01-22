@@ -1,8 +1,13 @@
 import { InjectionToken, Provider, ReflectiveInjector, ValueProvider } from 'injection-js';
-import { BUILD_NG_PACKAGE_TOKEN, BUILD_NG_PACKAGE_PROVIDER, BuildCallSignature } from '../steps/build-ng-package';
+import { of as observableOf } from 'rxjs/observable/of';
+import { take, map } from 'rxjs/operators';
+import { BuildGraph } from '../brocc/build-graph';
+import { Node } from '../brocc/node';
 import { TsConfig, DEFAULT_TS_CONFIG_PROVIDER, DEFAULT_TS_CONFIG_TOKEN } from '../ts/default-tsconfig';
 import { INIT_TS_CONFIG_PROVIDER } from '../ts/init-tsconfig';
-import { ENTRY_POINT_TRANSFORMS_PROVIDER } from '../steps/entry-point-transforms';
+import { ENTRY_POINT_TRANSFORM } from './entry-point.di';
+import { PACKAGE_TRANSFORM } from './package.di';
+import { provideProject } from './project.di';
 
 export class NgPackagr {
   constructor(private providers: Provider[]) {}
@@ -23,28 +28,29 @@ export class NgPackagr {
     return this;
   }
 
+  public forProject(project: string): NgPackagr {
+    this.providers.push(provideProject(project));
+
+    return this;
+  }
+
   public build(): Promise<void> {
     const injector = ReflectiveInjector.resolveAndCreate(this.providers);
-    const project = injector.get(PROJECT_TOKEN);
 
-    const buildNgPackage: BuildCallSignature = injector.get(BUILD_NG_PACKAGE_TOKEN);
+    // TODO
+    const transforms = injector.get(PACKAGE_TRANSFORM.provide);
 
-    return buildNgPackage({ project });
+    return observableOf(new BuildGraph())
+      .pipe(transforms, take(1), map(() => {}))
+      .toPromise();
   }
 }
 
 export const ngPackagr = (): NgPackagr =>
   new NgPackagr([
     // Add default providers to this list.
-    BUILD_NG_PACKAGE_PROVIDER,
-    ENTRY_POINT_TRANSFORMS_PROVIDER,
+    PACKAGE_TRANSFORM,
+    ENTRY_POINT_TRANSFORM,
     DEFAULT_TS_CONFIG_PROVIDER,
     INIT_TS_CONFIG_PROVIDER
   ]);
-
-export const PROJECT_TOKEN = new InjectionToken<string>('ng.v5.project');
-
-export const provideProject = (project: string): ValueProvider => ({
-  provide: PROJECT_TOKEN,
-  useValue: project
-});
